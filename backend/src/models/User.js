@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { type } from "os"
 export const createUserModel = (usersDB) => {
     if (usersDB.models.User) {
         return usersDB.models.User
@@ -32,6 +33,10 @@ export const createUserModel = (usersDB) => {
         tokenVersion: {
             type: Number,
             default: 1
+        },
+        isLoggedIn: {
+            type: Boolean,
+            default: false
         }
     }, { timestamps: true })
     return usersDB.model("User", userSchema)

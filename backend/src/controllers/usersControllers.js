@@ -136,6 +136,7 @@ export const login = (User) => async (req, res) => {
             const token = jwt.sign({ userId: user._id, tokenVersion: user.tokenVersion }, process.env.AUTH_SECRET, { expiresIn: "1h" })
             const refreshToken = jwt.sign({ userId: user._id }, process.env.REFRESH_SECRET, { expiresIn: "14d" })
             user.refreshToken = refreshToken
+            user.isLoggedIn = true
             await user.save()
             res.cookie("refreshToken", refreshToken, { httpOnly: true, secure: false, maxAge: 14 * 24 * 60 * 60 * 1000 })
             res.status(200).json({ token })
@@ -161,11 +162,12 @@ export const authMiddleware = (User) => async (req, res, next) => {
         const token = authHeader.split(" ")[1]
         const decoded = jwt.verify(token, process.env.AUTH_SECRET)
         const user = await User.findById(decoded.userId)
-        console.log(decoded.tokenVersion)
-        console.log(user.tokenVersion)
-        if (decoded.tokenVersion === user.tokenVersion) {
+        if (decoded.tokenVersion === user.tokenVersion && user.isLoggedIn === true) {
             req.user = decoded
             next();
+        }
+        else if (user.isLoggedIn === false) {
+            res.status(401).json({ message: "Please login first" })
         }
         else {
             res.status(401).json({ message: "Token expired ! Refresh !!" })
@@ -190,7 +192,9 @@ export const refreshToken = (User) => async (req, res) => {
         }
         const payload = jwt.verify(refreshToken, process.env.REFRESH_SECRET)
         const user = await User.findById(payload.userId)
-
+        if (!user) {
+            return res.status(404).json({ message: "User not found" })
+        }
         user.tokenVersion += 1
         const newAccessToken = jwt.sign({ userId: user._id, tokenVersion: user.tokenVersion }, process.env.AUTH_SECRET, { expiresIn: "1h" })
         await user.save()
@@ -206,6 +210,33 @@ export const refreshToken = (User) => async (req, res) => {
 
 
     }
+
+
+}
+export const logout = (User) => async (req, res) => {
+    try {
+        if (!req.cookies) {
+            return res.status(401).json({ message: "Please login first" })
+        }
+        const refreshToken = req.cookies.refreshToken
+        if (!refreshToken) {
+            return res.status(400).json({ message: "No token provided" })
+        }
+        const decoded = jwt.verify(refreshToken, process.env.REFRESH_SECRET)
+        if (!decoded) {
+            return res.status(403).json({ message: "Token not eligible" })
+        }
+        const user = await User.findById(decoded.userId)
+        user.refreshToken = null
+        user.isLoggedIn = false
+        await user.save()
+        res.status(200).json({ message: "User successfully logged out" })
+    } catch (error) {
+        console.log("Error logging out the user", error)
+        res.status(500).json({ message: "Internal server error" })
+
+    }
+
 
 
 }
